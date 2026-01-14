@@ -17,7 +17,7 @@ jobs:
       packages: write
 
     steps:
-      # 1. 清理磁盘空间 (防止 No space left on device)
+      # 1. 清理磁盘空间
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -37,18 +37,24 @@ jobs:
         with:
           python-version: '3.9'
 
-      # 2. 修正后的依赖安装步骤
+      # 2. 关键修复：安装系统级依赖 libgl1，并分步安装 Python 库
       - name: Install Conversion Dependencies
         run: |
+          # === 修复 ImportError: libGL.so.1 ===
+          sudo apt-get update
+          sudo apt-get install -y libgl1
+          # ====================================
+
           python -m pip install --upgrade pip
+          
           # 第一步：只安装 PyTorch CPU 版
           pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          # 第二步：安装其他库 (pip 会复用上面装好的 torch)
+          
+          # 第二步：安装 Ultralytics (依赖 opencv, 现已通过 libgl1 修复)
           pip install --no-cache-dir ultralytics onnx onnxruntime
 
       - name: Export YOLO26n to ONNX
         run: |
-          # 这一步需要下载模型，ultralytics 会自动处理
           yolo export model=yolo26n.pt format=onnx imgsz=640 simplify=True
 
       - name: Quantize Model
