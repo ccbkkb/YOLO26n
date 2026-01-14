@@ -1,0 +1,75 @@
+name: Deploy YOLO to Koyeb
+
+on:
+  push:
+    branches:
+      - main  # 只有推送到 main 分支时触发
+
+env:
+  REGISTRY: ghcr.io
+  # 镜像名称，自动设为 ghcr.io/你的用户名/仓库名:latest
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 1. 设置 Python 环境用于转换模型
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # 2. 安装转换所需的重型依赖 (这些不会打包进 Docker，只在 Action 里用)
+      - name: Install Conversion Dependencies
+        run: |
+          pip install ultralytics onnx onnxruntime
+
+      # 3. 下载并转换 YOLO26n -> ONNX
+      # 注意：如果 ultralytics 下载模型慢，可以换成 wget 直接下载 .pt
+      - name: Export YOLO26n to ONNX
+        run: |
+          # 这一步会自动下载 yolo26n.pt 并导出为 yolo26n.onnx
+          yolo export model=yolo26n.pt format=onnx imgsz=640 simplify=True
+
+      # 4. 运行量化脚本 (生成 model_quantized.onnx)
+      - name: Quantize Model
+        run: python quantize.py
+
+      # 5. 登录 GitHub Container Registry (GHCR)
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 6. 构建并推送 Docker 镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          # 确保把刚才生成的模型文件包含进 Context
+          file: Dockerfile
+
+      # 7. 部署到 Koyeb
+      - name: Deploy to Koyeb
+        uses: koyeb/action-git-deploy@v1
+        with:
+          # 需要在 GitHub Settings 里配置 KOYEB_API_TOKEN
+          api_token: ${{ secrets.KOYEB_API_TOKEN }}
+          app_name: yolo-server
+          # 告诉 Koyeb 使用我们刚才推送到 GHCR 的镜像
+          docker: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          ports: 8000:http
+          instance_type: free # 或者 nano
+          routes: /:8000
