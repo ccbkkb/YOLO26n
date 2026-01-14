@@ -7,7 +7,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # 关键修复：必须手动改为全小写！
+  IMAGE_NAME: ccbkkb/yolo26n
 
 jobs:
   build-and-deploy:
@@ -37,20 +38,13 @@ jobs:
         with:
           python-version: '3.9'
 
-      # 2. 关键修复：安装系统级依赖 libgl1，并分步安装 Python 库
+      # 2. 安装依赖 (含 libgl1 修复)
       - name: Install Conversion Dependencies
         run: |
-          # === 修复 ImportError: libGL.so.1 ===
           sudo apt-get update
           sudo apt-get install -y libgl1
-          # ====================================
-
           python -m pip install --upgrade pip
-          
-          # 第一步：只安装 PyTorch CPU 版
           pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          
-          # 第二步：安装 Ultralytics (依赖 opencv, 现已通过 libgl1 修复)
           pip install --no-cache-dir ultralytics onnx onnxruntime
 
       - name: Export YOLO26n to ONNX
@@ -80,6 +74,7 @@ jobs:
         with:
           api_token: ${{ secrets.KOYEB_API_TOKEN }}
           app_name: yolo-server
+          # 这一步会告诉 Koyeb 去拉取 ghcr.io/ccbkkb/yolo26n:latest
           docker: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           ports: 8000:http
           instance_type: free
