@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # 关键修复：必须手动改为全小写！
+  # 必须全小写
   IMAGE_NAME: ccbkkb/yolo26n
 
 jobs:
@@ -18,7 +18,6 @@ jobs:
       packages: write
 
     steps:
-      # 1. 清理磁盘空间
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -38,7 +37,6 @@ jobs:
         with:
           python-version: '3.9'
 
-      # 2. 安装依赖 (含 libgl1 修复)
       - name: Install Conversion Dependencies
         run: |
           sudo apt-get update
@@ -69,13 +67,16 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           file: Dockerfile
 
+      # === 修正后的部署步骤 ===
       - name: Deploy to Koyeb
         uses: koyeb/action-git-deploy@v1
         with:
-          api_token: ${{ secrets.KOYEB_API_TOKEN }}
-          app_name: yolo-server
-          # 这一步会告诉 Koyeb 去拉取 ghcr.io/ccbkkb/yolo26n:latest
+          app-name: yolo-server
+          service-name: yolo-server
           docker: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          ports: 8000:http
-          instance_type: free
-          routes: /:8000
+          service-ports: 8000:http
+          service-instance-type: free
+          service-routes: /:8000
+          service-type: web
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_API_TOKEN }}
