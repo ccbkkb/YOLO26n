@@ -17,19 +17,16 @@ jobs:
       packages: write
 
     steps:
-      # ==========================================
-      # 1. 核心修复：清理磁盘空间 (能腾出约 10GB+)
-      # ==========================================
+      # 1. 清理磁盘空间 (防止 No space left on device)
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
-          # 我们只需要 Python 和 Docker，其他都可以删
           tool-cache: false
           android: true
           dotnet: true
           haskell: true
           large-packages: true
-          docker-images: false # 不要删 Docker，否则构建会慢
+          docker-images: false
           swap-storage: false
 
       - name: Checkout code
@@ -40,20 +37,18 @@ jobs:
         with:
           python-version: '3.9'
 
-      # ==========================================
-      # 2. 核心修复：安装 CPU 版 PyTorch (极小)
-      # ==========================================
+      # 2. 修正后的依赖安装步骤
       - name: Install Conversion Dependencies
         run: |
-          # 升级 pip
           python -m pip install --upgrade pip
-          # 关键：指定 PyTorch CPU 源，防止下载几 GB 的 CUDA 版
-          # 关键：--no-cache-dir 防止缓存占满硬盘
-          pip install --no-cache-dir ultralytics onnx onnxruntime torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          # 第一步：只安装 PyTorch CPU 版
+          pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          # 第二步：安装其他库 (pip 会复用上面装好的 torch)
+          pip install --no-cache-dir ultralytics onnx onnxruntime
 
       - name: Export YOLO26n to ONNX
         run: |
-          # 导出模型
+          # 这一步需要下载模型，ultralytics 会自动处理
           yolo export model=yolo26n.pt format=onnx imgsz=640 simplify=True
 
       - name: Quantize Model
